@@ -1,0 +1,1636 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>皮克敏生態生長模擬器 | Pikmin Ecosystem Lab</title>
+  <meta name="description" content="互動式皮克敏生態生長模擬網頁遊戲：培育種子、採收拔起、迎戰原生斑膜怪、合力搬運黃金水果與突破屬性關卡！">
+  <meta name="theme-color" content="#0c0a09">
+  
+  <!-- OpenGraph 社交分享卡片 -->
+  <meta property="og:title" content="皮克敏生態生長模擬器">
+  <meta property="og:description" content="培育、拔起、戰鬥與搬運！體驗任天堂經典皮克敏生態。">
+  <meta property="og:type" content="website">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Google 字體 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+    html, body {
+      height: 100%;
+      overscroll-behavior: none;
+    }
+    body {
+      font-family: 'Fredoka', 'Noto Sans TC', sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+
+    /* 安全區適配 (iPhone 瀏海與底部橫條) */
+    .safe-top {
+      padding-top: max(0.5rem, env(safe-area-inset-top));
+    }
+    .safe-bottom {
+      padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+    }
+
+    /* 天空動態背景色彩漸變 */
+    .sky-day {
+      background: linear-gradient(180deg, #38bdf8 0%, #bae6fd 45%, #bbf7d0 80%, #86efac 100%);
+    }
+    .sky-sunset {
+      background: linear-gradient(180deg, #ea580c 0%, #fb923c 35%, #db2777 70%, #65a30d 100%);
+    }
+    .sky-night {
+      background: linear-gradient(180deg, #090d16 0%, #171836 45%, #251e4b 75%, #14532d 100%);
+    }
+
+    /* 土壤正常 vs X光掃描模式 */
+    .soil-gradient {
+      background: linear-gradient(180deg, #381a08 0%, #220e04 60%, #140702 100%);
+      transition: background 0.4s ease, box-shadow 0.4s ease;
+    }
+    .soil-xray {
+      background: linear-gradient(180deg, #082142 0%, #05142b 60%, #020914 100%) !important;
+      box-shadow: inset 0 0 35px rgba(56, 189, 248, 0.45);
+    }
+
+    /* 動畫幀定義 */
+    @keyframes gentle-sway {
+      0%, 100% { transform: rotate(-5deg); }
+      50% { transform: rotate(5deg); }
+    }
+    @keyframes pulse-glow {
+      0%, 100% { transform: scale(1); filter: drop-shadow(0 0 4px rgba(250, 204, 21, 0.8)); }
+      50% { transform: scale(1.08); filter: drop-shadow(0 0 12px rgba(250, 204, 21, 1)); }
+    }
+    @keyframes whistle-ring {
+      0% { transform: translate(-50%, -50%) scale(0.2); opacity: 0.95; }
+      100% { transform: translate(-50%, -50%) scale(3.8); opacity: 0; }
+    }
+    @keyframes bulborb-chomp {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.15) rotate(-6deg); }
+    }
+    @keyframes bounce-slow {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-4px); }
+    }
+    @keyframes fire-flicker {
+      0%, 100% { transform: scale(1); filter: drop-shadow(0 0 6px #ef4444); }
+      50% { transform: scale(1.08) translateY(-2px); filter: drop-shadow(0 0 12px #f97316); }
+    }
+    @keyframes zap-flicker {
+      0%, 100% { opacity: 0.85; filter: drop-shadow(0 0 4px #eab308); }
+      50% { opacity: 1; filter: drop-shadow(0 0 10px #fde047); }
+    }
+
+    .animate-sway { animation: gentle-sway 2.4s infinite ease-in-out; }
+    .animate-pulse-glow { animation: pulse-glow 1.6s infinite ease-in-out; }
+    .animate-bounce-slow { animation: bounce-slow 1.6s infinite ease-in-out; }
+    .animate-fire { animation: fire-flicker 0.5s infinite alternate ease-in-out; }
+    .animate-zap { animation: zap-flicker 0.25s infinite alternate ease-in-out; }
+    .enemy-chomp { animation: bulborb-chomp 0.22s ease-out; }
+
+    /* 草皮分界紋理 */
+    .grass-border-strip {
+      background: linear-gradient(180deg, #16a34a 0%, #15803d 40%, #14532d 100%);
+    }
+
+    /* 隱藏滾動條 */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+</head>
+<body class="bg-stone-950 text-stone-100 h-full flex flex-col justify-between overflow-x-hidden select-none safe-bottom">
+
+  <!-- 頂部資訊列：全載具兩層 Responsive Grid 佈局 -->
+  <header class="w-full bg-stone-900/95 backdrop-blur-md border-b border-stone-800 z-30 sticky top-0 px-2.5 sm:px-4 py-1.5 safe-top">
+    <div class="max-w-4xl mx-auto flex flex-col gap-1.5">
+      
+      <!-- 第一列：標題、天數徽章、多功能按鈕組 -->
+      <div class="grid grid-cols-12 items-center gap-2">
+        <!-- 標題與天數標籤 -->
+        <div class="col-span-7 sm:col-span-8 flex items-center gap-2 min-w-0">
+          <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-tr from-lime-500 to-emerald-400 flex items-center justify-center shadow text-sm shrink-0">
+            🌱
+          </div>
+          <div class="flex items-center gap-1.5 truncate">
+            <h1 class="text-xs sm:text-sm md:text-base font-bold tracking-tight text-white whitespace-nowrap">
+              皮克敏生態生長模擬
+            </h1>
+            <span id="day-counter-badge" class="shrink-0 text-[10px] sm:text-xs bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-md font-bold">
+              第 1 天
+            </span>
+          </div>
+        </div>
+
+        <!-- 輔助按鈕工具組 (透視 / 音效 / 攻略) -->
+        <div class="col-span-5 sm:col-span-4 grid grid-cols-3 gap-1 sm:gap-1.5">
+          <button id="btn-xray" class="h-7 sm:h-8 px-1 text-[11px] sm:text-xs font-bold rounded-lg border border-stone-700 bg-stone-800 hover:bg-stone-700 text-stone-300 transition flex items-center justify-center gap-1 shadow-sm active:scale-95">
+            <span>🔍</span><span id="xray-text">透視</span>
+          </button>
+          <button id="btn-sound" class="h-7 sm:h-8 px-1 text-[11px] sm:text-xs font-bold rounded-lg border border-stone-700 bg-stone-800 hover:bg-stone-700 text-stone-300 transition flex items-center justify-center gap-1 shadow-sm active:scale-95">
+            <span id="sound-icon">🔊</span>
+          </button>
+          <button id="btn-guide" class="h-7 sm:h-8 px-1 text-[11px] sm:text-xs font-bold rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white transition flex items-center justify-center gap-0.5 shadow-sm active:scale-95">
+            <span>📖</span><span>攻略</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 第二列：三等分儀表板 (土中 / 隊列 / 日落時鐘) -->
+      <div class="grid grid-cols-3 gap-1.5 bg-stone-900/90 rounded-xl p-1 border border-stone-800/80 text-xs">
+        <!-- 土中萌芽 -->
+        <div class="flex items-center justify-center gap-1 sm:gap-1.5 bg-stone-800/60 rounded-lg py-1 px-1 border border-stone-700/60">
+          <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0"></span>
+          <span class="text-stone-400 text-[10px] sm:text-xs whitespace-nowrap">土中:</span>
+          <span id="stat-growing" class="font-bold text-amber-300 font-mono text-xs sm:text-sm">3</span>
+        </div>
+        <!-- 活躍隊列 -->
+        <div class="flex items-center justify-center gap-1 sm:gap-1.5 bg-stone-800/60 rounded-lg py-1 px-1 border border-stone-700/60">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
+          <span class="text-stone-400 text-[10px] sm:text-xs whitespace-nowrap">隊列:</span>
+          <span id="stat-plucked" class="font-bold text-emerald-400 font-mono text-xs sm:text-sm">0</span>
+        </div>
+        <!-- 日落時鐘 -->
+        <div class="flex items-center justify-center gap-1 bg-stone-800/60 rounded-lg py-1 px-1 border border-stone-700/60">
+          <span id="sunset-icon" class="text-[10px] sm:text-xs text-amber-400 font-bold whitespace-nowrap">☀️ 日落:</span>
+          <span id="timer-sunset" class="font-mono font-bold text-amber-300 text-xs sm:text-sm">02:00</span>
+        </div>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- 主模擬視窗容器 -->
+  <main class="relative flex-1 w-full max-w-4xl mx-auto flex flex-col p-2 sm:p-3 gap-2 min-h-0 justify-between">
+    
+    <!-- 自然生態特性提示條 -->
+    <div class="w-full bg-stone-900/85 border border-stone-800 rounded-xl p-1.5 px-3 flex items-center justify-between shadow-sm text-xs text-stone-300 shrink-0">
+      <div class="flex items-center gap-2 overflow-x-auto whitespace-nowrap no-scrollbar">
+        <span class="px-1.5 py-0.5 rounded bg-amber-600/80 text-white font-bold text-[10px]">屬性剋制</span>
+        <span class="text-[11px] sm:text-xs text-stone-300">
+          🔥<strong>紅皮克敏</strong> 拆除火焰門 ｜ ⚡<strong>黃皮克敏</strong> 導電拆除電柵欄
+        </span>
+      </div>
+      <div class="shrink-0 pl-2 border-l border-stone-800 text-[11px] sm:text-xs font-bold text-amber-400" id="quest-score">
+        累計: 0 處
+      </div>
+    </div>
+
+    <!-- 核心動態畫布：採用動態響應高度，保證全載具完整一屏呈現 -->
+    <div id="simulation-stage" class="relative w-full rounded-2xl overflow-hidden shadow-2xl border border-stone-700/70 flex flex-col flex-1 min-h-[360px] max-h-[580px]">
+      
+      <!-- 1. 地表天空層 (佔比 58%) -->
+      <div id="surface-layer" class="relative flex-[58] sky-day transition-colors duration-1000 overflow-hidden">
+        
+        <!-- 雲朵 -->
+        <div id="sky-clouds" class="absolute inset-0 pointer-events-none transition-opacity duration-1000 opacity-60">
+          <div class="absolute top-3 left-6 w-20 h-7 bg-white/70 rounded-full blur-xs"></div>
+          <div class="absolute top-8 right-12 w-28 h-8 bg-white/60 rounded-full blur-xs"></div>
+        </div>
+
+        <!-- 夜空繁星 -->
+        <div id="sky-stars" class="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-1000">
+          <span class="absolute top-5 left-10 text-white/80 text-xs animate-pulse">✦</span>
+          <span class="absolute top-10 left-1/3 text-amber-200/90 text-sm animate-pulse">★</span>
+          <span class="absolute top-6 right-1/4 text-white/70 text-xs animate-pulse">✦</span>
+          <span class="absolute top-12 right-8 text-yellow-100/80 text-xs animate-pulse">★</span>
+        </div>
+
+        <!-- 歐擬蛹母體 (The Onion) -->
+        <div id="onion-pod" class="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center cursor-pointer group active:scale-95 transition-transform" title="點擊歐擬蛹噴射種子！">
+          <div class="relative w-24 h-20 flex items-center justify-center">
+            <svg viewBox="0 0 100 85" class="w-full h-full drop-shadow-md">
+              <polygon points="50,4 47,18 53,18" fill="#facc15" />
+              <ellipse cx="50" cy="4" rx="14" ry="3" fill="#eab308" />
+              <path d="M 50,16 C 18,16 12,50 50,62 C 88,50 82,16 50,16 Z" fill="#f43f5e" />
+              <path d="M 32,36 C 42,46 58,46 68,36 C 63,52 37,52 32,36 Z" fill="#3b82f6" />
+              <ellipse cx="50" cy="45" rx="15" ry="6" fill="#fbbf24" />
+              <line x1="32" y1="58" x2="20" y2="78" stroke="#78350f" stroke-width="3.5" stroke-linecap="round" />
+              <line x1="50" y1="62" x2="50" y2="82" stroke="#78350f" stroke-width="3.5" stroke-linecap="round" />
+              <line x1="68" y1="58" x2="80" y2="78" stroke="#78350f" stroke-width="3.5" stroke-linecap="round" />
+              <circle cx="20" cy="78" r="3.5" fill="#ca8a04" />
+              <circle cx="50" cy="82" r="3.5" fill="#ca8a04" />
+              <circle cx="80" cy="78" r="3.5" fill="#ca8a04" />
+            </svg>
+          </div>
+          <div class="bg-amber-950/90 text-amber-300 border border-amber-400/50 text-[10px] font-bold px-2.5 py-0.5 rounded-full shadow -mt-1 flex items-center gap-1 pointer-events-none">
+            <span>🚀 歐擬蛹</span> <span class="text-amber-400 text-[9px]">(點我空投)</span>
+          </div>
+        </div>
+
+        <!-- 地表活動走廊 (Active Surface Area) -->
+        <div id="active-entities-layer" class="absolute inset-0 pointer-events-auto z-15"></div>
+
+        <!-- 草地地平線分界帶 (固定在天空底端) -->
+        <div class="absolute bottom-0 inset-x-0 h-6 grass-border-strip border-b border-lime-900 z-10 flex items-center justify-around px-2 pointer-events-none">
+          <div class="w-full flex justify-between opacity-80 text-[10px] sm:text-xs">
+            <span>🌿</span><span>☘️</span><span>🌱</span><span>🍀</span><span>🌿</span><span>🌱</span><span>☘️</span><span>🌿</span>
+          </div>
+        </div>
+
+        <!-- 夜幕暗調遮罩 -->
+        <div id="night-overlay" class="absolute inset-0 pointer-events-none bg-indigo-950/0 transition-colors duration-1000 z-20"></div>
+      </div>
+
+      <!-- 2. 地下土壤生長層 (佔比 42%) -->
+      <div id="soil-layer" class="relative flex-[42] soil-gradient border-t-2 border-amber-950 p-2 flex flex-col justify-between transition-colors duration-400 overflow-hidden">
+        
+        <!-- 土壤顆粒質感 -->
+        <div class="absolute inset-0 opacity-20 pointer-events-none" style="background-image: radial-gradient(#d97706 1px, transparent 1px); background-size: 12px 12px;"></div>
+
+        <!-- X光掃描藍色網格 -->
+        <div id="xray-grid" class="absolute inset-0 opacity-0 pointer-events-none transition-opacity duration-400" style="background-image: linear-gradient(rgba(56, 189, 248, 0.2) 1px, transparent 1px), linear-gradient(90deg, rgba(56, 189, 248, 0.2) 1px, transparent 1px); background-size: 18px 18px;"></div>
+
+        <!-- 5 個植穴槽位容器 -->
+        <div class="relative w-full h-full flex items-center justify-around gap-1 px-1 z-10" id="soil-slots-container">
+          <!-- 由 JS 動態生成 5 個植穴槽位 -->
+        </div>
+
+        <!-- 土壤底部指引條 -->
+        <div class="relative z-10 flex items-center justify-between text-[10px] sm:text-[11px] text-amber-200/60 px-1 pt-1 border-t border-amber-900/40">
+          <span>🌱 地下培養苗床 (成熟點擊即可採收拔起)</span>
+          <span class="text-amber-400/90 font-mono">點擊下方按鈕播種</span>
+        </div>
+      </div>
+
+      <!-- 漂浮提示與打擊特效容器 -->
+      <div id="floating-text-container" class="absolute inset-0 pointer-events-none z-30"></div>
+    </div>
+
+    <!-- 底部操作列：5 品種播種按鈕群 + 右下角專屬加大集合哨 (Grid 系統排齊) -->
+    <div class="w-full bg-stone-900/95 border border-stone-800 rounded-2xl p-2 sm:p-2.5 shadow-xl grid grid-cols-12 gap-2 items-center shrink-0">
+      
+      <!-- 左側 10 欄 (手機佔 9 欄)：5 品種播種按鈕 -->
+      <div class="col-span-9 sm:col-span-10 flex flex-col gap-1">
+        <div class="text-[10px] sm:text-xs text-stone-400 font-bold flex items-center justify-between px-0.5">
+          <span>🌱 培育新品種 (點擊噴射種子入土)</span>
+          <span class="text-[10px] text-amber-400 font-normal hidden sm:inline">或點選上方歐擬蛹</span>
+        </div>
+
+        <!-- 5 種皮克敏等寬 Grid 排列 -->
+        <div class="grid grid-cols-5 gap-1 sm:gap-2">
+          <!-- 紅皮克敏 -->
+          <button onclick="handleManualPlant('red')" class="p-1 sm:p-2 rounded-xl bg-rose-950/70 border border-rose-500/50 hover:bg-rose-900/80 active:scale-95 transition flex flex-col items-center">
+            <span class="text-base sm:text-lg">🔴</span>
+            <span class="text-[10px] sm:text-xs font-bold text-rose-300">紅皮克</span>
+            <span class="text-[8px] sm:text-[9px] text-rose-400/80 font-mono">耐火</span>
+          </button>
+
+          <!-- 黃皮克敏 -->
+          <button onclick="handleManualPlant('yellow')" class="p-1 sm:p-2 rounded-xl bg-amber-950/70 border border-amber-500/50 hover:bg-amber-900/80 active:scale-95 transition flex flex-col items-center">
+            <span class="text-base sm:text-lg">🟡</span>
+            <span class="text-[10px] sm:text-xs font-bold text-amber-300">黃皮克</span>
+            <span class="text-[8px] sm:text-[9px] text-amber-400/80 font-mono">抗電</span>
+          </button>
+
+          <!-- 藍皮克敏 -->
+          <button onclick="handleManualPlant('blue')" class="p-1 sm:p-2 rounded-xl bg-blue-950/70 border border-blue-500/50 hover:bg-blue-900/80 active:scale-95 transition flex flex-col items-center">
+            <span class="text-base sm:text-lg">🔵</span>
+            <span class="text-[10px] sm:text-xs font-bold text-blue-300">藍皮克</span>
+            <span class="text-[8px] sm:text-[9px] text-blue-400/80 font-mono">水棲</span>
+          </button>
+
+          <!-- 白皮克敏 -->
+          <button onclick="handleManualPlant('white')" class="p-1 sm:p-2 rounded-xl bg-stone-800/80 border border-rose-300/40 hover:bg-stone-700/80 active:scale-95 transition flex flex-col items-center">
+            <span class="text-base sm:text-lg">⚪</span>
+            <span class="text-[10px] sm:text-xs font-bold text-stone-200">白皮克</span>
+            <span class="text-[8px] sm:text-[9px] text-rose-300/80 font-mono">疾速</span>
+          </button>
+
+          <!-- 岩石皮克敏 -->
+          <button onclick="handleManualPlant('rock')" class="p-1 sm:p-2 rounded-xl bg-stone-800/80 border border-stone-500/50 hover:bg-stone-700/80 active:scale-95 transition flex flex-col items-center">
+            <span class="text-base sm:text-lg">🪨</span>
+            <span class="text-[10px] sm:text-xs font-bold text-stone-300">岩石皮</span>
+            <span class="text-[8px] sm:text-[9px] text-stone-400/80 font-mono">重擊</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 右側 3 欄 / 2 欄：專屬超大型召集哨 (加大按鍵面積，觸控更精確) -->
+      <div class="col-span-3 sm:col-span-2 flex items-center justify-center pl-1 border-l border-stone-800 h-full">
+        <button id="btn-giant-whistle" class="w-full h-[62px] sm:h-[72px] rounded-2xl bg-gradient-to-tr from-amber-600 via-yellow-500 to-amber-400 text-stone-950 font-black shadow-lg shadow-amber-500/30 flex flex-col items-center justify-center active:scale-90 active:rotate-[-6deg] transition-all transform hover:brightness-110 border-2 border-yellow-200/90 group" title="吹響哨音：全體集合避難！">
+          <span class="text-2xl sm:text-3xl group-hover:scale-110 transition-transform">📯</span>
+          <span class="text-[11px] sm:text-xs font-black tracking-tight -mt-0.5">集合哨</span>
+        </button>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- 攻略說明彈窗 -->
+  <div id="guide-modal" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 hidden">
+    <div class="bg-stone-900 border border-stone-700 w-full max-w-md rounded-2xl p-4 sm:p-5 shadow-2xl flex flex-col gap-3 max-h-[85vh] overflow-y-auto text-xs sm:text-sm">
+      <div class="flex items-center justify-between border-b border-stone-800 pb-2.5">
+        <h3 class="font-bold text-sm sm:text-base text-amber-400 flex items-center gap-1.5">
+          📖 皮克敏生態操作攻略
+        </h3>
+        <button id="close-guide-btn" class="w-7 h-7 rounded-lg bg-stone-800 text-stone-400 hover:text-white flex items-center justify-center active:scale-95">✕</button>
+      </div>
+
+      <div class="space-y-2 text-stone-300 leading-relaxed text-xs sm:text-sm">
+        <div class="p-2 sm:p-2.5 rounded-xl bg-stone-800/80 border border-stone-700">
+          <span class="font-bold text-amber-300">🌱 1. 採收拔起 (Pluck)</span>
+          <p class="mt-0.5 text-stone-400">點擊土壤中成長至「嫩葉、花苞或盛開」之植穴，即可伴隨「啵！」一聲拔出皮克敏跳到草皮上漫遊跟隨。</p>
+        </div>
+
+        <div class="p-2 sm:p-2.5 rounded-xl bg-stone-800/80 border border-stone-700">
+          <span class="font-bold text-amber-300">🍯 2. 花蜜吸吮 (Nectar)</span>
+          <p class="mt-0.5 text-stone-400">回收水果後草地會掉落金黃花蜜，皮克敏會主動跑去喝蜜！未開花者直接盛開，已開花者獲得疾風加速！</p>
+        </div>
+
+        <div class="p-2 sm:p-2.5 rounded-xl bg-stone-800/80 border border-stone-700">
+          <span class="font-bold text-amber-300">⚔️ 3. 戰鬥與搬運 (Combat & Carry)</span>
+          <p class="mt-0.5 text-stone-400">點擊斑膜怪投擲皮克敏攻擊；打倒後合力搬回歐擬蛹轉換為新種子！點擊黃金水果可派出 3 隻搬運。</p>
+        </div>
+
+        <div class="p-2 sm:p-2.5 rounded-xl bg-stone-800/80 border border-stone-700">
+          <span class="font-bold text-amber-300">🛡️ 4. 屬性剋制 (Hazards)</span>
+          <p class="mt-0.5 text-stone-400">🔥 點擊火焰門指派<strong>紅皮克敏</strong>拆除；⚡ 點擊電柵欄指派<strong>黃皮克敏</strong>導電拆除。</p>
+        </div>
+
+        <div class="p-2 sm:p-2.5 rounded-xl bg-stone-800/80 border border-stone-700">
+          <span class="font-bold text-amber-300">☀️ 5. 日落破曉循環 (Day/Night)</span>
+          <p class="mt-0.5 text-stone-400">倒數結束進入夜晚，夜過天明將迎來旭日東昇進入全新一天，生態自然重生循環！</p>
+        </div>
+      </div>
+
+      <button id="guide-confirm-btn" class="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-lime-600 text-white font-bold rounded-xl transition shadow active:scale-95 text-xs sm:text-sm">
+        出發探索生態！
+      </button>
+    </div>
+  </div>
+
+  <!-- JavaScript 核心生態引擎 -->
+  <script>
+    // 皮克敏品種定義
+    const PIKMIN_SPECIES = {
+      red:    { name: '紅皮克敏', color: '#ef4444', flowerColor: '#ffffff', speed: 1.0, power: 1.4, trait: '耐火・高攻擊' },
+      yellow: { name: '黃皮克敏', color: '#eab308', flowerColor: '#ffffff', speed: 1.1, power: 1.0, trait: '耐電・輕盈' },
+      blue:   { name: '藍皮克敏', color: '#3b82f6', flowerColor: '#ffffff', speed: 1.0, power: 1.0, trait: '水棲・耐溺' },
+      white:  { name: '白皮克敏', color: '#f5f5f4', flowerColor: '#ef4444', speed: 1.5, power: 0.8, trait: '敏捷・毒性' },
+      rock:   { name: '岩石皮克', color: '#78716c', flowerColor: '#ffffff', speed: 0.85, power: 1.8, trait: '堅硬・重擊' }
+    };
+
+    // 全域遊戲狀態
+    const state = {
+      growthRateMultiplier: 1.0,
+      soundEnabled: true,
+      xrayEnabled: false,
+      slotsCount: 5,
+      slots: [],            // 5 個土壤植穴
+      roamingPikmins: [],   // 拔出後在地表草皮活動的活體皮克敏
+      nectars: [],          // 花蜜滴
+      enemies: [],          // 斑膜怪
+      questItems: [],       // 水果目標
+      envHazards: [],       // 屬性障礙物
+      currentDay: 1,
+      dayDuration: 120,     // 白天秒數
+      nightDuration: 25,    // 夜晚秒數
+      sunsetSeconds: 120,   // 當前週期倒數計時
+      sunsetStage: 'day',   // 'day' | 'sunset' | 'night'
+      questsCompleted: 0,
+      enemySpawnCooldown: 2.0 // 自然進場倒數
+    };
+
+    // Web Audio 音效合成引擎
+    class SoundEngine {
+      constructor() {
+        this.ctx = null;
+      }
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (AudioContext) this.ctx = new AudioContext();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+
+      playPluckSound() {
+        if (!state.soundEnabled || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(320, now);
+        osc.frequency.exponentialRampToValueAtTime(860, now + 0.12);
+        gain.gain.setValueAtTime(0.35, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.14);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.15);
+      }
+
+      playWhistleSound() {
+        if (!state.soundEnabled || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        [580, 880, 1180].forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'triangle';
+          const t = now + idx * 0.07;
+          osc.frequency.setValueAtTime(freq, t);
+          osc.frequency.linearRampToValueAtTime(freq + 50, t + 0.06);
+          gain.gain.setValueAtTime(0.2, t);
+          gain.gain.exponentialRampToValueAtTime(0.01, t + 0.07);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(t);
+          osc.stop(t + 0.08);
+        });
+      }
+
+      playNectarSound() {
+        if (!state.soundEnabled || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(540, now);
+        osc.frequency.exponentialRampToValueAtTime(1080, now + 0.16);
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.18);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.2);
+      }
+
+      playChompSound() {
+        if (!state.soundEnabled || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(160, now);
+        osc.frequency.exponentialRampToValueAtTime(55, now + 0.14);
+        gain.gain.setValueAtTime(0.35, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.16);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.18);
+      }
+
+      playRewardFanfare() {
+        if (!state.soundEnabled || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        [523, 659, 783, 1046].forEach((f, i) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          const st = now + i * 0.08;
+          osc.frequency.setValueAtTime(f, st);
+          gain.gain.setValueAtTime(0.2, st);
+          gain.gain.exponentialRampToValueAtTime(0.01, st + 0.2);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(st);
+          osc.stop(st + 0.22);
+        });
+      }
+    }
+    const soundEngine = new SoundEngine();
+
+    // 取得當前草皮基準 Y 座標（自適應視窗縮放）
+    function getGrassY() {
+      const surfaceLayer = document.getElementById('surface-layer');
+      const h = surfaceLayer?.clientHeight || 260;
+      return h - 45;
+    }
+
+    // 渲染生長階段植物 SVG (種子 / 嫩葉 / 花苞 / 盛開花朵)
+    function renderSproutSVG(species, stage) {
+      if (stage === 'seed') {
+        return `
+          <svg viewBox="0 0 40 40" class="w-6 h-6 drop-shadow">
+            <ellipse cx="20" cy="20" rx="9" ry="6" fill="#854d0e" />
+            <path d="M 20,14 C 20,8 26,10 28,6" stroke="#4ade80" stroke-width="2" fill="none" stroke-linecap="round"/>
+          </svg>
+        `;
+      }
+      if (stage === 'leaf') {
+        return `
+          <svg viewBox="0 0 40 50" class="w-7 h-9 animate-sway">
+            <line x1="20" y1="50" x2="20" y2="20" stroke="#15803d" stroke-width="3" stroke-linecap="round"/>
+            <path d="M 20,22 C 8,14 10,2 24,6 C 30,10 24,18 20,22 Z" fill="#22c55e" stroke="#16a34a" stroke-width="1.2"/>
+          </svg>
+        `;
+      }
+      if (stage === 'bud') {
+        return `
+          <svg viewBox="0 0 40 50" class="w-7 h-9 animate-sway">
+            <line x1="20" y1="50" x2="20" y2="22" stroke="#15803d" stroke-width="3" stroke-linecap="round"/>
+            <ellipse cx="20" cy="18" rx="8" ry="11" fill="#ec4899" stroke="#db2777" stroke-width="1.5"/>
+            <path d="M 17,25 C 13,20 13,14 18,10" stroke="#f472b6" stroke-width="2" fill="none"/>
+          </svg>
+        `;
+      }
+      // flower 盛開
+      return `
+        <svg viewBox="0 0 50 60" class="w-9 h-11 animate-pulse-glow">
+          <line x1="25" y1="60" x2="25" y2="24" stroke="#15803d" stroke-width="3.5" stroke-linecap="round"/>
+          <circle cx="25" cy="14" r="5" fill="#facc15" stroke="#eab308" stroke-width="1.5"/>
+          <circle cx="25" cy="5" r="4.5" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+          <circle cx="34" cy="11" r="4.5" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+          <circle cx="31" cy="21" r="4.5" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+          <circle cx="19" cy="21" r="4.5" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+          <circle cx="16" cy="11" r="4.5" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+        </svg>
+      `;
+    }
+
+    // 渲染地表跑動的活體皮克敏造型
+    function renderFullPikminSVG(species, stage = 'flower') {
+      const sp = PIKMIN_SPECIES[species] || PIKMIN_SPECIES.red;
+      const bodyColor = sp.color;
+
+      let feature = '';
+      if (species === 'red') {
+        feature = `<polygon points="26,24 33,26 26,28" fill="#dc2626" />`;
+      } else if (species === 'yellow') {
+        feature = `
+          <ellipse cx="14" cy="24" rx="4.5" ry="3" fill="#ca8a04" />
+          <ellipse cx="26" cy="24" rx="4.5" ry="3" fill="#ca8a04" />
+        `;
+      } else if (species === 'blue') {
+        feature = `<ellipse cx="20" cy="28" rx="3.5" ry="2" fill="#1e3a8a" />`;
+      } else if (species === 'white') {
+        feature = `
+          <circle cx="16" cy="22" r="3" fill="#ef4444" />
+          <circle cx="24" cy="22" r="3" fill="#ef4444" />
+        `;
+      } else if (species === 'rock') {
+        feature = `<polygon points="12,18 28,15 30,32 14,35" fill="#57534e" opacity="0.6"/>`;
+      }
+
+      let topPlant = '';
+      if (stage === 'flower') {
+        topPlant = `
+          <circle cx="20" cy="5" r="3" fill="#facc15" />
+          <circle cx="20" cy="1" r="2.5" fill="#ffffff" />
+          <circle cx="24" cy="3" r="2.5" fill="#ffffff" />
+          <circle cx="23" cy="8" r="2.5" fill="#ffffff" />
+          <circle cx="17" cy="8" r="2.5" fill="#ffffff" />
+          <circle cx="16" cy="3" r="2.5" fill="#ffffff" />
+        `;
+      } else if (stage === 'bud') {
+        topPlant = `<ellipse cx="20" cy="4" rx="4" ry="5.5" fill="#ec4899" />`;
+      } else {
+        topPlant = `<path d="M 20,6 C 12,2 14,-3 22,0 Z" fill="#22c55e" />`;
+      }
+
+      return `
+        <svg viewBox="0 0 40 50" class="w-8 h-10 drop-shadow pointer-events-none">
+          <line x1="20" y1="20" x2="20" y2="7" stroke="#15803d" stroke-width="2.2" stroke-linecap="round"/>
+          ${topPlant}
+          <ellipse cx="20" cy="26" rx="7.5" ry="10" fill="${bodyColor}" />
+          ${feature}
+          <circle cx="17" cy="23" r="2.2" fill="#ffffff" />
+          <circle cx="17" cy="23" r="1.1" fill="#000000" />
+          <circle cx="23" cy="23" r="2.2" fill="#ffffff" />
+          <circle cx="23" cy="23" r="1.1" fill="#000000" />
+          <line x1="17" y1="35" x2="15" y2="42" stroke="${bodyColor}" stroke-width="2" stroke-linecap="round"/>
+          <line x1="23" y1="35" x2="25" y2="42" stroke="${bodyColor}" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      `;
+    }
+
+    // 渲染斑膜怪 (Bulborb 恰皮)
+    function renderBulborbSVG(hp, maxHp) {
+      const hpPct = Math.max(0, Math.min(100, (hp / maxHp) * 100));
+      return `
+        <div class="relative w-20 h-16 sm:w-24 sm:h-18 pointer-events-none drop-shadow-xl">
+          <div class="absolute -top-3 left-1/2 -translate-x-1/2 w-14 bg-stone-900/90 rounded-full h-1.5 p-0.5 border border-stone-600">
+            <div class="h-full bg-rose-500 rounded-full transition-all" style="width: ${hpPct}%"></div>
+          </div>
+          <svg viewBox="0 0 80 60" class="w-full h-full drop-shadow-md">
+            <ellipse cx="50" cy="30" rx="26" ry="20" fill="#dc2626" />
+            <circle cx="56" cy="22" r="5" fill="#ffffff" />
+            <circle cx="42" cy="25" r="4.5" fill="#ffffff" />
+            <circle cx="62" cy="35" r="4" fill="#ffffff" />
+            <circle cx="48" cy="38" r="4" fill="#ffffff" />
+            <path d="M 12,38 C 12,18 42,18 45,38 C 45,46 16,46 12,38 Z" fill="#fef3c7" />
+            <path d="M 12,36 C 24,44 38,44 45,36" stroke="#b45309" stroke-width="2.5" fill="none"/>
+            <circle cx="20" cy="14" r="7" fill="#ffffff" stroke="#78350f" stroke-width="1.5"/>
+            <circle cx="21" cy="14" r="3.5" fill="#000000" />
+            <circle cx="34" cy="14" r="7" fill="#ffffff" stroke="#78350f" stroke-width="1.5"/>
+            <circle cx="35" cy="14" r="3.5" fill="#000000" />
+            <ellipse cx="36" cy="48" rx="5" ry="3" fill="#fef3c7" stroke="#b45309" stroke-width="1.5"/>
+            <ellipse cx="56" cy="48" rx="5" ry="3" fill="#fef3c7" stroke="#b45309" stroke-width="1.5"/>
+          </svg>
+        </div>
+      `;
+    }
+
+    // 渲染屬性障礙物 (火焰門 / 電柵欄)
+    function renderHazardSVG(type, hp, maxHp) {
+      const hpPct = Math.max(0, Math.min(100, (hp / maxHp) * 100));
+      if (type === 'fire') {
+        return `
+          <div class="relative w-14 h-14 pointer-events-none flex flex-col items-center">
+            <div class="w-12 bg-stone-900/90 rounded-full h-1.5 p-0.5 border border-stone-600 mb-0.5">
+              <div class="h-full bg-amber-500 rounded-full transition-all" style="width: ${hpPct}%"></div>
+            </div>
+            <div class="relative w-12 h-10 flex items-center justify-center animate-fire">
+              <span class="text-2xl">🔥</span>
+              <span class="absolute -bottom-1 text-[9px] bg-rose-950 text-rose-200 px-1 rounded font-bold border border-rose-500/80">火焰門</span>
+            </div>
+          </div>
+        `;
+      }
+      return `
+        <div class="relative w-14 h-14 pointer-events-none flex flex-col items-center">
+          <div class="w-12 bg-stone-900/90 rounded-full h-1.5 p-0.5 border border-stone-600 mb-0.5">
+            <div class="h-full bg-yellow-400 rounded-full transition-all" style="width: ${hpPct}%"></div>
+          </div>
+          <div class="relative w-12 h-10 flex items-center justify-center animate-zap">
+            <span class="text-2xl">⚡</span>
+            <span class="absolute -bottom-1 text-[9px] bg-yellow-950 text-yellow-300 px-1 rounded font-bold border border-yellow-500/80">電柵欄</span>
+          </div>
+        </div>
+      `;
+    }
+
+    // 初始化 5 個土壤植穴槽位
+    function initGardenSlots() {
+      const container = document.getElementById('soil-slots-container');
+      container.innerHTML = '';
+      state.slots = [];
+
+      for (let i = 0; i < state.slotsCount; i++) {
+        const slotEl = document.createElement('div');
+        slotEl.className = 'relative flex-1 h-full max-w-[80px] rounded-xl border border-amber-900/50 bg-amber-950/20 flex flex-col items-center justify-between p-1 cursor-pointer transition active:scale-95 group hover:border-amber-500/50';
+        slotEl.dataset.slotIndex = i;
+
+        slotEl.innerHTML = `
+          <!-- 地表探頭 (嫩葉/花苞/花) -->
+          <div class="sprout-holder h-11 flex items-end justify-center pointer-events-none z-10"></div>
+          
+          <!-- 地底種子核心與根系 (透視用) -->
+          <div class="underground-core flex-1 w-full flex flex-col items-center justify-center pointer-events-none relative">
+            <div class="seed-root opacity-0 transition-opacity duration-300 w-full h-7 flex items-center justify-center">
+              <svg viewBox="0 0 40 40" class="w-full h-full">
+                <path d="M 20,4 C 18,14 10,22 8,32 M 20,12 C 22,20 28,26 32,32 M 20,18 L 20,36" stroke="#38bdf8" stroke-width="1.5" stroke-dasharray="2 2" fill="none"/>
+              </svg>
+            </div>
+            <div class="seed-ball w-5 h-5 rounded-full bg-amber-800/80 border border-amber-600/70 flex items-center justify-center shadow-inner">
+              <span class="text-[9px]">🌱</span>
+            </div>
+          </div>
+
+          <!-- 槽位狀態標籤 -->
+          <div class="status-badge text-[9px] sm:text-[10px] font-bold px-1 py-0.5 rounded-md bg-stone-900/90 text-amber-300/80 border border-amber-500/20 group-hover:bg-amber-600 group-hover:text-white transition">
+            空植穴
+          </div>
+        `;
+
+        slotEl.addEventListener('click', () => handleSlotClick(i));
+        container.appendChild(slotEl);
+
+        state.slots.push({
+          id: i,
+          element: slotEl,
+          occupied: false,
+          species: 'red',
+          progress: 0,
+          stage: 'seed',
+          rootDepth: 1
+        });
+      }
+
+      // 開局預備豐富生態，讓玩家可直接體驗拔出
+      plantSeedToSlot(0, 'red', 100);   // 盛開紅花（可立即拔起！）
+      plantSeedToSlot(1, 'yellow', 75); // 含苞黃花
+      plantSeedToSlot(2, 'blue', 35);   // 嫩葉藍草
+    }
+
+    function getStageFromProgress(progress) {
+      if (progress < 25) return 'seed';
+      if (progress < 60) return 'leaf';
+      if (progress < 95) return 'bud';
+      return 'flower';
+    }
+
+    function plantSeedToSlot(slotIndex, species = 'red', initialProgress = 0) {
+      const slot = state.slots[slotIndex];
+      if (!slot) return;
+
+      slot.occupied = true;
+      slot.species = species;
+      slot.progress = initialProgress;
+      slot.stage = getStageFromProgress(initialProgress);
+
+      updateSlotDisplay(slot);
+      updateDashboardStats();
+    }
+
+    function updateSlotDisplay(slot) {
+      const el = slot.element;
+      const sproutHolder = el.querySelector('.sprout-holder');
+      const badge = el.querySelector('.status-badge');
+      const seedBall = el.querySelector('.seed-ball');
+      const root = el.querySelector('.seed-root');
+
+      if (!slot.occupied) {
+        sproutHolder.innerHTML = '';
+        badge.textContent = '空植穴';
+        badge.className = 'status-badge text-[9px] sm:text-[10px] font-bold px-1 py-0.5 rounded-md bg-stone-900/80 text-stone-500 border border-stone-800';
+        seedBall.style.opacity = '0.3';
+        root.style.opacity = '0';
+        return;
+      }
+
+      seedBall.style.opacity = '1';
+      seedBall.style.borderColor = PIKMIN_SPECIES[slot.species]?.color || '#f59e0b';
+      root.style.opacity = state.xrayEnabled ? '1' : '0';
+
+      sproutHolder.innerHTML = renderSproutSVG(slot.species, slot.stage);
+
+      if (slot.stage === 'flower') {
+        badge.textContent = '點擊拔起!';
+        badge.className = 'status-badge text-[9px] sm:text-[10px] font-bold px-1 py-0.5 rounded-md bg-emerald-500 text-stone-950 animate-bounce shadow-md';
+      } else if (slot.stage === 'bud') {
+        badge.textContent = '含苞中';
+        badge.className = 'status-badge text-[9px] sm:text-[10px] font-bold px-1 py-0.5 rounded-md bg-pink-900/90 text-pink-200 border border-pink-500/40';
+      } else if (slot.stage === 'leaf') {
+        badge.textContent = '可採摘';
+        badge.className = 'status-badge text-[9px] sm:text-[10px] font-bold px-1 py-0.5 rounded-md bg-lime-900/90 text-lime-200 border border-lime-500/40';
+      } else {
+        badge.textContent = `${Math.floor(slot.progress)}%`;
+        badge.className = 'status-badge text-[9px] sm:text-[10px] font-bold px-1 py-0.5 rounded-md bg-stone-900/90 text-amber-300/80 border border-amber-500/20';
+      }
+    }
+
+    // 點擊土壤植穴：採收拔起
+    function handleSlotClick(slotIndex) {
+      soundEngine.init();
+      const slot = state.slots[slotIndex];
+      if (!slot || !slot.occupied) return;
+
+      if (slot.stage !== 'seed') {
+        pluckPikminFromSlot(slot);
+      } else {
+        showFloatingText(slot.element.offsetLeft + 30, 240, '地下生根萌發中...', '#fbbf24');
+      }
+    }
+
+    // 採收拔起：皮克敏彈跳進入草皮地表層
+    function pluckPikminFromSlot(slot) {
+      soundEngine.playPluckSound();
+      
+      const surfaceLayer = document.getElementById('surface-layer');
+      const surfaceWidth = surfaceLayer.clientWidth || 360;
+      const grassFloorY = getGrassY();
+
+      const startX = (slot.id + 0.5) * (surfaceWidth / state.slotsCount);
+      const startY = grassFloorY;
+
+      const pikmin = {
+        id: 'p_' + Date.now() + '_' + Math.random(),
+        species: slot.species,
+        stage: slot.stage,
+        x: startX,
+        y: startY,
+        targetX: Math.random() * (surfaceWidth - 60) + 30,
+        targetY: startY + (Math.random() - 0.5) * 16,
+        state: 'idle',
+        carryTarget: null,
+        cheerTimer: 0,
+        buffTimer: 0,
+        element: null
+      };
+
+      const pEl = document.createElement('div');
+      pEl.className = 'absolute z-20 cursor-pointer active:scale-95 transition-transform flex flex-col items-center -translate-x-1/2 -translate-y-1/2';
+      pEl.style.left = `${pikmin.x}px`;
+      pEl.style.top = `${pikmin.y}px`;
+      pEl.innerHTML = renderFullPikminSVG(pikmin.species, pikmin.stage);
+      
+      // 點擊隊列中皮克敏歡呼跳躍
+      pEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        soundEngine.init();
+        soundEngine.playPluckSound();
+        pikmin.state = 'cheering';
+        pikmin.cheerTimer = 25;
+        createSparkles(pEl, '#facc15', 6);
+      });
+
+      document.getElementById('active-entities-layer').appendChild(pEl);
+      pikmin.element = pEl;
+      state.roamingPikmins.push(pikmin);
+
+      // 清空土壤植穴
+      slot.occupied = false;
+      slot.progress = 0;
+      slot.stage = 'seed';
+      updateSlotDisplay(slot);
+
+      // 拔起彈跳特效
+      pEl.animate([
+        { transform: 'translate(-50%, -50%) scale(0.3) translateY(25px)', opacity: 0 },
+        { transform: 'translate(-50%, -50%) scale(1.2) translateY(-14px)', opacity: 1 },
+        { transform: 'translate(-50%, -50%) scale(1) translateY(0)', opacity: 1 }
+      ], { duration: 320, easing: 'ease-out' });
+
+      createSparkles(slot.element, '#fef08a', 8);
+      showFloatingText(pikmin.x, pikmin.y - 30, `啵！${PIKMIN_SPECIES[pikmin.species].name} 加入隊列！`, '#4ade80');
+      updateDashboardStats();
+    }
+
+    // 歐擬蛹空投種子動畫
+    function animateSeedDropFromOnion(targetSlotIndex, species) {
+      soundEngine.init();
+      const stageEl = document.getElementById('simulation-stage');
+      const stageRect = stageEl.getBoundingClientRect();
+      const startX = stageRect.width / 2;
+      const startY = 60;
+
+      const targetX = (targetSlotIndex + 0.5) * (stageRect.width / state.slotsCount);
+      const targetY = stageRect.height * 0.72;
+
+      const seed = document.createElement('div');
+      seed.className = 'absolute z-30 pointer-events-none w-5 h-5 flex items-center justify-center';
+      seed.innerHTML = `
+        <div class="w-4 h-4 rounded-full bg-gradient-to-tr from-amber-600 to-yellow-400 border border-white shadow-lg animate-spin flex items-center justify-center text-[9px]">
+          🌱
+        </div>
+      `;
+      seed.style.left = `${startX}px`;
+      seed.style.top = `${startY}px`;
+      document.getElementById('surface-layer').appendChild(seed);
+
+      const startTime = performance.now();
+      const duration = 600;
+
+      function flight(now) {
+        const elapsed = now - startTime;
+        const p = Math.min(1, elapsed / duration);
+        const curX = startX + (targetX - startX) * p;
+        const curY = startY + (targetY - startY) * p - Math.sin(p * Math.PI) * 80;
+
+        seed.style.left = `${curX}px`;
+        seed.style.top = `${curY}px`;
+
+        if (p < 1) {
+          requestAnimationFrame(flight);
+        } else {
+          seed.remove();
+          plantSeedToSlot(targetSlotIndex, species, 0);
+          soundEngine.playNectarSound();
+          createSparkles(state.slots[targetSlotIndex].element, '#facc15', 6);
+        }
+      }
+      requestAnimationFrame(flight);
+    }
+
+    function handleManualPlant(species) {
+      soundEngine.init();
+      const emptySlot = state.slots.find(s => !s.occupied);
+      if (!emptySlot) {
+        showFloatingText(180, 100, '土壤已滿！請先點擊土壤拔起皮克敏！', '#f87171');
+        return;
+      }
+      animateSeedDropFromOnion(emptySlot.id, species);
+    }
+
+    // 生成野生斑膜怪 (Bulborb)
+    function spawnBulborb(x, y) {
+      const surfaceLayer = document.getElementById('surface-layer');
+      const actualY = y || getGrassY();
+
+      const el = document.createElement('div');
+      el.className = 'absolute z-25 cursor-pointer active:scale-95 transition-transform flex flex-col items-center -translate-x-1/2 -translate-y-1/2';
+      el.style.left = `${x}px`;
+      el.style.top = `${actualY}px`;
+      el.innerHTML = renderBulborbSVG(100, 100);
+
+      const enemy = {
+        id: 'bulborb_' + Date.now() + Math.random(),
+        type: 'bulborb',
+        x: x,
+        y: actualY,
+        vx: (Math.random() < 0.5 ? 1 : -1) * (28 + Math.random() * 10),
+        hp: 100,
+        maxHp: 100,
+        state: 'patrolling',
+        element: el
+      };
+
+      // 點擊斑膜怪：投擲皮克敏攻擊
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        soundEngine.init();
+        if (enemy.state !== 'patrolling') return;
+
+        const readyPikmins = state.roamingPikmins.filter(p => p.state === 'idle' || p.state === 'walking');
+        if (readyPikmins.length === 0) {
+          showFloatingText(enemy.x, enemy.y - 25, '隊列無空閒皮克敏！請先拔起夥伴！', '#f87171');
+          return;
+        }
+
+        const attacker = readyPikmins[0];
+        attacker.state = 'attacking';
+        attacker.targetX = enemy.x + (Math.random() - 0.5) * 16;
+        attacker.targetY = enemy.y + (Math.random() - 0.5) * 10;
+
+        soundEngine.playPluckSound();
+        const baseDmg = (PIKMIN_SPECIES[attacker.species]?.power || 1.0) * 25;
+        const flowerDmgMult = attacker.stage === 'flower' ? 1.4 : 1.0;
+        const totalDmg = Math.floor(baseDmg * flowerDmgMult);
+
+        enemy.hp -= totalDmg;
+        showFloatingText(enemy.x + 10, enemy.y - 25, `突擊 -${totalDmg} 點！💥`, '#f87171');
+        createSparkles(enemy.element, '#f87171', 6);
+
+        if (enemy.hp <= 0) {
+          enemy.hp = 0;
+          enemy.state = 'defeated';
+          soundEngine.playRewardFanfare();
+          showFloatingText(enemy.x, enemy.y - 30, '斑膜怪被擊潰！合力搬回歐擬蛹！🏆', '#facc15');
+          el.innerHTML = renderBulborbSVG(0, 100);
+          el.classList.add('opacity-80', 'rotate-180');
+        } else {
+          el.innerHTML = renderBulborbSVG(enemy.hp, enemy.maxHp);
+        }
+      });
+
+      document.getElementById('active-entities-layer').appendChild(el);
+      state.enemies.push(enemy);
+      showFloatingText(x, actualY - 30, '👾 野生斑膜怪出現了！', '#ef4444');
+    }
+
+    // 生成屬性障礙物 (火焰門 / 高壓電柵)
+    function spawnEnvHazard(type = 'fire', x) {
+      const y = getGrassY();
+
+      const el = document.createElement('div');
+      el.className = 'absolute z-15 cursor-pointer active:scale-95 transition-transform flex flex-col items-center -translate-x-1/2 -translate-y-1/2';
+      el.style.left = `${x}px`;
+      el.style.top = `${y}px`;
+      el.innerHTML = renderHazardSVG(type, 100, 100);
+
+      const hazard = {
+        id: 'hazard_' + Date.now(),
+        type: type,
+        x: x,
+        y: y,
+        hp: 100,
+        maxHp: 100,
+        element: el
+      };
+
+      // 點擊障礙物：指派對應屬性皮克敏
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        soundEngine.init();
+
+        const requiredSpecies = hazard.type === 'fire' ? 'red' : 'yellow';
+        const suitable = state.roamingPikmins.filter(p => (p.state === 'idle' || p.state === 'walking') && p.species === requiredSpecies);
+
+        if (suitable.length === 0) {
+          showFloatingText(hazard.x, hazard.y - 25, `需要「${PIKMIN_SPECIES[requiredSpecies].name}」才能拆除！`, '#f87171');
+          return;
+        }
+
+        suitable.slice(0, 3).forEach(p => {
+          p.state = 'carrying';
+          p.carryTarget = hazard;
+          p.targetX = hazard.x + (Math.random() - 0.5) * 16;
+          p.targetY = hazard.y + 10;
+        });
+
+        soundEngine.playWhistleSound();
+        showFloatingText(hazard.x, hazard.y - 20, `${PIKMIN_SPECIES[requiredSpecies].name} 正在拆解障礙中！🔧`, '#facc15');
+      });
+
+      document.getElementById('active-entities-layer').appendChild(el);
+      state.envHazards.push(hazard);
+    }
+
+    // 生成巨型黃金水果
+    function spawnQuestFruit(x, y) {
+      const actualY = y || getGrassY();
+      const el = document.createElement('div');
+      el.className = 'absolute z-15 cursor-pointer active:scale-95 transition-transform flex flex-col items-center -translate-x-1/2 -translate-y-1/2';
+      el.style.left = `${x}px`;
+      el.style.top = `${actualY}px`;
+      el.innerHTML = `
+        <div class="relative w-11 h-11 flex flex-col items-center pointer-events-none animate-bounce-slow">
+          <span class="text-2xl drop-shadow">🍎</span>
+          <span class="text-[9px] bg-amber-950/90 text-amber-300 px-1.5 rounded-full font-bold border border-amber-500/50 -mt-1 shadow">
+            0/3
+          </span>
+        </div>
+      `;
+
+      const fruit = {
+        id: 'fruit_' + Date.now(),
+        x: x,
+        y: actualY,
+        reqCarriers: 3,
+        carriers: [],
+        element: el
+      };
+
+      // 點擊黃金水果：指派搬運
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        soundEngine.init();
+
+        const idlePikmins = state.roamingPikmins.filter(p => p.state === 'idle' || p.state === 'walking');
+        const needed = fruit.reqCarriers - fruit.carriers.length;
+
+        if (idlePikmins.length === 0 && needed > 0) {
+          showFloatingText(fruit.x, fruit.y - 20, '無空閒皮克敏！請拔出更多夥伴！', '#f87171');
+          return;
+        }
+
+        const assign = idlePikmins.slice(0, needed);
+        assign.forEach(p => {
+          p.state = 'carrying';
+          p.carryTarget = fruit;
+          fruit.carriers.push(p);
+        });
+
+        soundEngine.playWhistleSound();
+        el.querySelector('span:last-child').textContent = `${fruit.carriers.length}/${fruit.reqCarriers}`;
+        showFloatingText(fruit.x, fruit.y - 22, `指派搬運隊員！(${fruit.carriers.length}/${fruit.reqCarriers})`, '#facc15');
+      });
+
+      document.getElementById('active-entities-layer').appendChild(el);
+      state.questItems.push(fruit);
+    }
+
+    // 掉落花蜜
+    function dropNectarAt(x, y) {
+      const el = document.createElement('div');
+      el.className = 'absolute z-10 w-6 h-6 -translate-x-1/2 -translate-y-1/2 pointer-events-none animate-pulse-glow flex items-center justify-center';
+      el.style.left = `${x}px`;
+      el.style.top = `${y}px`;
+      el.innerHTML = `
+        <div class="w-4 h-4 rounded-full bg-gradient-to-tr from-amber-500 to-yellow-200 border-2 border-white shadow flex items-center justify-center text-[9px]">
+          🍯
+        </div>
+      `;
+
+      document.getElementById('active-entities-layer').appendChild(el);
+      state.nectars.push({
+        id: 'nectar_' + Date.now() + Math.random(),
+        x: x,
+        y: y,
+        sipsLeft: 4,
+        element: el
+      });
+    }
+
+    function createSparkles(targetElement, color = '#facc15', count = 6) {
+      if (!targetElement) return;
+      const rect = targetElement.getBoundingClientRect();
+      const stageRect = document.getElementById('simulation-stage').getBoundingClientRect();
+      const centerX = rect.left - stageRect.left + rect.width / 2;
+      const centerY = rect.top - stageRect.top + rect.height / 2;
+
+      for (let i = 0; i < count; i++) {
+        const spark = document.createElement('div');
+        spark.className = 'absolute z-40 pointer-events-none rounded-full w-1.5 h-1.5';
+        spark.style.backgroundColor = color;
+        spark.style.left = `${centerX}px`;
+        spark.style.top = `${centerY}px`;
+        document.getElementById('floating-text-container').appendChild(spark);
+
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 15 + Math.random() * 25;
+        const destX = centerX + Math.cos(angle) * dist;
+        const destY = centerY + Math.sin(angle) * dist - 10;
+
+        spark.animate([
+          { transform: 'scale(1)', opacity: 1 },
+          { transform: `translate(${destX - centerX}px, ${destY - centerY}px) scale(0)`, opacity: 0 }
+        ], { duration: 400 + Math.random() * 150, easing: 'ease-out' }).onfinish = () => spark.remove();
+      }
+    }
+
+    function showFloatingText(x, y, text, color = '#facc15') {
+      const container = document.getElementById('floating-text-container');
+      const msg = document.createElement('div');
+      msg.className = 'absolute z-40 pointer-events-none font-bold text-[11px] sm:text-xs drop-shadow px-2.5 py-0.5 rounded-full bg-stone-900/90 -translate-x-1/2 whitespace-nowrap border border-stone-700/50 shadow';
+      msg.style.color = color;
+      msg.style.left = `${x}px`;
+      msg.style.top = `${y}px`;
+      msg.textContent = text;
+      container.appendChild(msg);
+
+      msg.animate([
+        { transform: 'translate(-50%, 0)', opacity: 1 },
+        { transform: 'translate(-50%, -26px)', opacity: 0 }
+      ], { duration: 850, easing: 'ease-out' }).onfinish = () => msg.remove();
+    }
+
+    function updateDashboardStats() {
+      const growing = state.slots.filter(s => s.occupied).length;
+      document.getElementById('stat-growing').textContent = growing;
+      document.getElementById('stat-plucked').textContent = state.roamingPikmins.length;
+    }
+
+    let lastTime = performance.now();
+    let sunsetTickTimer = 0;
+
+    function startNewDay() {
+      state.currentDay++;
+      state.sunsetSeconds = state.dayDuration;
+      state.sunsetStage = 'day';
+
+      document.getElementById('day-counter-badge').textContent = `第 ${state.currentDay} 天`;
+      
+      const surfaceLayer = document.getElementById('surface-layer');
+      const nightOverlay = document.getElementById('night-overlay');
+      const clouds = document.getElementById('sky-clouds');
+      const stars = document.getElementById('sky-stars');
+      const sunsetIcon = document.getElementById('sunset-icon');
+
+      surfaceLayer.className = 'relative flex-[58] sky-day transition-colors duration-1000 overflow-hidden';
+      nightOverlay.classList.remove('bg-indigo-950/40');
+      nightOverlay.classList.add('bg-indigo-950/0');
+      clouds.style.opacity = '0.6';
+      stars.style.opacity = '0';
+      sunsetIcon.textContent = '☀️ 日落:';
+
+      soundEngine.playRewardFanfare();
+      showFloatingText(180, 80, `🌅 旭日東昇！迎接第 ${state.currentDay} 天！`, '#facc15');
+
+      // 清晨幸運種子
+      const emptySlot = state.slots.find(s => !s.occupied);
+      if (emptySlot) {
+        const speciesKeys = Object.keys(PIKMIN_SPECIES);
+        const randSpecies = speciesKeys[Math.floor(Math.random() * speciesKeys.length)];
+        animateSeedDropFromOnion(emptySlot.id, randSpecies);
+      }
+    }
+
+    // 主模擬迴圈 (Main Loop)
+    function simulationLoop(currentTime) {
+      const dt = Math.min((currentTime - lastTime) / 1000, 0.1);
+      lastTime = currentTime;
+
+      // 1. 日夜時鐘倒數 (Day ➔ Sunset ➔ Night ➔ New Day)
+      sunsetTickTimer += dt;
+      if (sunsetTickTimer >= 1.0) {
+        sunsetTickTimer = 0;
+        
+        if (state.sunsetSeconds > 0) {
+          state.sunsetSeconds--;
+          const mins = String(Math.floor(state.sunsetSeconds / 60)).padStart(2, '0');
+          const secs = String(state.sunsetSeconds % 60).padStart(2, '0');
+          document.getElementById('timer-sunset').textContent = `${mins}:${secs}`;
+
+          const surfaceLayer = document.getElementById('surface-layer');
+          const sunsetIcon = document.getElementById('sunset-icon');
+
+          if (state.sunsetStage === 'day' && state.sunsetSeconds <= 40) {
+            state.sunsetStage = 'sunset';
+            surfaceLayer.className = 'relative flex-[58] sky-sunset transition-colors duration-1000 overflow-hidden';
+            sunsetIcon.textContent = '🌇 黃昏:';
+            showFloatingText(180, 90, '🌇 日落黃昏，怪獸即將甦醒！', '#fbbf24');
+          }
+        } else {
+          if (state.sunsetStage === 'sunset' || state.sunsetStage === 'day') {
+            state.sunsetStage = 'night';
+            state.sunsetSeconds = state.nightDuration;
+            
+            const surfaceLayer = document.getElementById('surface-layer');
+            const nightOverlay = document.getElementById('night-overlay');
+            const clouds = document.getElementById('sky-clouds');
+            const stars = document.getElementById('sky-stars');
+            const sunsetIcon = document.getElementById('sunset-icon');
+
+            surfaceLayer.className = 'relative flex-[58] sky-night transition-colors duration-1000 overflow-hidden';
+            nightOverlay.classList.remove('bg-indigo-950/0');
+            nightOverlay.classList.add('bg-indigo-950/40');
+            clouds.style.opacity = '0.2';
+            stars.style.opacity = '1';
+            sunsetIcon.textContent = '🌙 破曉:';
+            showFloatingText(180, 90, '⚠️ 夜幕降臨！野生生物變得兇猛！快吹哨避難！', '#f87171');
+          } else if (state.sunsetStage === 'night') {
+            startNewDay();
+          }
+        }
+      }
+
+      // 2. 土壤種子成長
+      const growthStep = 5.0 * state.growthRateMultiplier * (dt || 0.016);
+      state.slots.forEach(slot => {
+        if (slot.occupied && slot.progress < 100) {
+          slot.progress = Math.min(100, slot.progress + growthStep);
+          const newStage = getStageFromProgress(slot.progress);
+
+          if (newStage !== slot.stage) {
+            slot.stage = newStage;
+            soundEngine.playNectarSound();
+            createSparkles(slot.element, '#bef264', 5);
+          }
+          updateSlotDisplay(slot);
+        }
+      });
+
+      const surfaceLayer = document.getElementById('surface-layer');
+      const surfaceWidth = surfaceLayer.clientWidth || 360;
+      const grassFloorY = getGrassY();
+      const onionTargetX = surfaceWidth * 0.5;
+      const onionTargetY = 50;
+
+      // 3. 屬性障礙物拆除
+      state.envHazards.forEach((hazard, hIdx) => {
+        const workers = state.roamingPikmins.filter(p => p.state === 'carrying' && p.carryTarget === hazard);
+        if (workers.length > 0) {
+          hazard.hp -= (workers.length * 16) * dt;
+          if (hazard.hp <= 0) {
+            soundEngine.playRewardFanfare();
+            createSparkles(hazard.element, '#facc15', 10);
+            showFloatingText(hazard.x, hazard.y, `${hazard.type === 'fire' ? '火焰門' : '電柵欄'} 拆除成功！✨`, '#4ade80');
+            hazard.element.remove();
+            state.envHazards.splice(hIdx, 1);
+
+            workers.forEach(p => {
+              p.state = 'cheering';
+              p.cheerTimer = 30;
+            });
+
+            state.questsCompleted++;
+            document.getElementById('quest-score').textContent = `累計: ${state.questsCompleted} 處`;
+          } else {
+            hazard.element.innerHTML = renderHazardSVG(hazard.type, hazard.hp, hazard.maxHp);
+          }
+        }
+      });
+
+      // 4. 野生生物與障礙物自然定時生成機制
+      state.enemySpawnCooldown -= dt;
+      if (state.enemySpawnCooldown <= 0) {
+        state.enemySpawnCooldown = 8.0 + Math.random() * 4.0;
+        
+        const activeBulborbs = state.enemies.filter(e => e.state === 'patrolling');
+        if (activeBulborbs.length === 0) {
+          const spawnFromLeft = Math.random() < 0.5;
+          const spawnX = spawnFromLeft ? 40 : surfaceWidth - 50;
+          spawnBulborb(spawnX, grassFloorY);
+        }
+
+        if (state.envHazards.length === 0) {
+          const nextType = Math.random() < 0.5 ? 'fire' : 'electric';
+          const nextX = 50 + Math.random() * (surfaceWidth - 110);
+          spawnEnvHazard(nextType, nextX);
+        }
+
+        if (state.questItems.length === 0) {
+          const fx = 40 + Math.random() * (surfaceWidth - 90);
+          spawnQuestFruit(fx, grassFloorY);
+        }
+      }
+
+      // 5. 斑膜怪 (Bulborb) 巡邏 AI 與捕食
+      state.enemies.forEach((enemy, eIdx) => {
+        if (enemy.state === 'patrolling') {
+          const nightSpeedMult = state.sunsetStage === 'night' ? 1.6 : 1.0;
+          enemy.x += enemy.vx * dt * nightSpeedMult;
+          if (enemy.x > surfaceWidth - 40) {
+            enemy.vx = -Math.abs(enemy.vx);
+            enemy.element.style.transform = 'scaleX(1)';
+          } else if (enemy.x < 40) {
+            enemy.vx = Math.abs(enemy.vx);
+            enemy.element.style.transform = 'scaleX(-1)';
+          }
+          enemy.element.style.left = `${enemy.x}px`;
+
+          // 靠近吞食判定
+          state.roamingPikmins.forEach((p, pIdx) => {
+            if (p.state === 'idle' || p.state === 'walking') {
+              const dist = Math.hypot(p.x - enemy.x, p.y - enemy.y);
+              if (dist < 28 && Math.random() < 0.03) {
+                soundEngine.playChompSound();
+                p.element.remove();
+                state.roamingPikmins.splice(pIdx, 1);
+                showFloatingText(enemy.x + 10, enemy.y - 10, '皮克敏被吞食了！😱 快吹哨！', '#f87171');
+                enemy.element.classList.add('enemy-chomp');
+                setTimeout(() => enemy.element.classList.remove('enemy-chomp'), 220);
+                updateDashboardStats();
+              }
+            }
+          });
+        } else if (enemy.state === 'defeated') {
+          // 搬回歐擬蛹
+          const dx = onionTargetX - enemy.x;
+          const dy = onionTargetY - enemy.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist > 16) {
+            enemy.x += (dx / dist) * 28 * dt;
+            enemy.y += (dy / dist) * 28 * dt;
+            enemy.element.style.left = `${enemy.x}px`;
+            enemy.element.style.top = `${enemy.y}px`;
+          } else {
+            soundEngine.playRewardFanfare();
+            createSparkles(document.getElementById('onion-pod'), '#facc15', 12);
+            enemy.element.remove();
+            state.enemies.splice(eIdx, 1);
+            showFloatingText(onionTargetX - 30, onionTargetY + 30, '回收生物！轉化為新生種子！🌱', '#4ade80');
+
+            const emptySlot = state.slots.find(s => !s.occupied);
+            if (emptySlot) {
+              plantSeedToSlot(emptySlot.id, 'rock', 0);
+            }
+          }
+        }
+      });
+
+      // 6. 水果搬運 AI
+      state.questItems.forEach((fruit, fIdx) => {
+        if (fruit.carriers.length >= fruit.reqCarriers) {
+          const dx = onionTargetX - fruit.x;
+          const dy = onionTargetY - fruit.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist > 16) {
+            fruit.x += (dx / dist) * 32 * dt;
+            fruit.y += (dy / dist) * 32 * dt;
+            fruit.element.style.left = `${fruit.x}px`;
+            fruit.element.style.top = `${fruit.y}px`;
+
+            fruit.carriers.forEach((cp, cIdx) => {
+              cp.x = fruit.x + (cIdx * 9) - 10;
+              cp.y = fruit.y + 16;
+              cp.element.style.left = `${cp.x}px`;
+              cp.element.style.top = `${cp.y}px`;
+            });
+          } else {
+            soundEngine.playRewardFanfare();
+            showFloatingText(onionTargetX - 30, onionTargetY + 30, '黃金水果回收！產出甘霖花蜜！🍯', '#f59e0b');
+            fruit.carriers.forEach(cp => {
+              cp.state = 'cheering';
+              cp.cheerTimer = 30;
+            });
+            fruit.element.remove();
+            state.questItems.splice(fIdx, 1);
+            
+            dropNectarAt(surfaceWidth * 0.38, grassFloorY);
+            dropNectarAt(surfaceWidth * 0.62, grassFloorY);
+
+            state.questsCompleted++;
+            document.getElementById('quest-score').textContent = `累計: ${state.questsCompleted} 處`;
+          }
+        }
+      });
+
+      // 7. 地表活體皮克敏自主運動 & 花蜜吸吮強化
+      state.roamingPikmins.forEach((p) => {
+        if (p.state === 'carrying') return;
+
+        if (p.state === 'cheering') {
+          p.cheerTimer--;
+          p.element.style.transform = `translateY(${Math.sin(p.cheerTimer * 0.4) * -6}px)`;
+          if (p.cheerTimer <= 0) {
+            p.state = 'idle';
+            p.element.style.transform = 'none';
+          }
+          return;
+        }
+
+        // 花蜜導航與吸吮強化
+        if (state.nectars.length > 0) {
+          const nearestNectar = state.nectars[0];
+          const distToNectar = Math.hypot(nearestNectar.x - p.x, nearestNectar.y - p.y);
+
+          if (p.state === 'idle' || p.state === 'walking') {
+            if (distToNectar < 140 && Math.random() < 0.15) {
+              p.targetX = nearestNectar.x + (Math.random() - 0.5) * 14;
+              p.targetY = grassFloorY;
+              p.state = 'walking';
+            }
+          }
+
+          if (distToNectar < 25) {
+            nearestNectar.sipsLeft--;
+            soundEngine.playNectarSound();
+
+            if (p.stage !== 'flower') {
+              p.stage = 'flower';
+              p.element.innerHTML = renderFullPikminSVG(p.species, 'flower');
+              showFloatingText(p.x, p.y - 18, '吸吮花蜜！綻放五瓣花！🌸', '#fef08a');
+            } else {
+              p.buffTimer = 80;
+              showFloatingText(p.x, p.y - 18, '疾風狂暴！跑速加成！✨', '#facc15');
+            }
+
+            p.state = 'cheering';
+            p.cheerTimer = 25;
+            createSparkles(p.element, '#facc15', 8);
+
+            if (nearestNectar.sipsLeft <= 0) {
+              nearestNectar.element.remove();
+              state.nectars.splice(0, 1);
+            }
+          }
+        }
+
+        // 自由漫步在草皮帶
+        if (p.state === 'idle' && Math.random() < 0.02) {
+          p.targetX = 25 + Math.random() * (surfaceWidth - 60);
+          p.targetY = grassFloorY + (Math.random() - 0.5) * 16;
+          p.state = 'walking';
+        }
+
+        const dx = p.targetX - p.x;
+        const dy = p.targetY - p.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist > 5) {
+          const hasBuff = p.buffTimer && p.buffTimer > 0;
+          if (hasBuff) p.buffTimer--;
+
+          let speed = 65 * (PIKMIN_SPECIES[p.species]?.speed || 1.0);
+          if (hasBuff) speed *= 1.5;
+
+          p.x += (dx / dist) * speed * dt;
+          p.y += (dy / dist) * speed * dt;
+
+          const flip = dx < 0 ? -1 : 1;
+          const wobble = Math.sin(currentTime * 0.015) * 5;
+          p.element.style.transform = `scaleX(${flip}) rotate(${wobble}deg)`;
+        } else if (p.state === 'walking') {
+          p.state = 'idle';
+          p.element.style.transform = 'none';
+        }
+
+        p.element.style.left = `${p.x}px`;
+        p.element.style.top = `${p.y}px`;
+      });
+
+      requestAnimationFrame(simulationLoop);
+    }
+
+    // 視窗 Resize 自適應監聽 (保持全載具比例協調)
+    function handleResize() {
+      const surfaceLayer = document.getElementById('surface-layer');
+      const w = surfaceLayer?.clientWidth || 360;
+      const grassY = getGrassY();
+
+      // 校正皮克敏與地面目標 Y 軸
+      state.roamingPikmins.forEach(p => {
+        if (p.state !== 'carrying') {
+          p.y = grassY;
+          if (p.x > w - 20) p.x = w - 30;
+          p.element.style.left = `${p.x}px`;
+          p.element.style.top = `${p.y}px`;
+        }
+      });
+
+      state.enemies.forEach(e => {
+        if (e.state === 'patrolling') {
+          e.y = grassY;
+          e.element.style.top = `${e.y}px`;
+        }
+      });
+
+      state.envHazards.forEach(h => {
+        h.y = grassY;
+        h.element.style.top = `${h.y}px`;
+      });
+
+      state.questItems.forEach(q => {
+        if (q.carriers.length < q.reqCarriers) {
+          q.y = grassY;
+          q.element.style.top = `${q.y}px`;
+        }
+      });
+    }
+
+    function setupEventListeners() {
+      window.addEventListener('resize', handleResize);
+
+      // 點擊歐擬蛹本體空投種子
+      const onionPod = document.getElementById('onion-pod');
+      onionPod.addEventListener('click', () => {
+        soundEngine.init();
+        const emptySlot = state.slots.find(s => !s.occupied);
+        if (!emptySlot) {
+          showFloatingText(onionPod.offsetLeft, onionPod.offsetTop + 70, '土壤已滿！請先點擊土壤拔起皮克敏！', '#f87171');
+          return;
+        }
+        const speciesKeys = Object.keys(PIKMIN_SPECIES);
+        const randomSpecies = speciesKeys[Math.floor(Math.random() * speciesKeys.length)];
+        animateSeedDropFromOnion(emptySlot.id, randomSpecies);
+      });
+
+      // 右下角加大集合哨
+      const giantWhistle = document.getElementById('btn-giant-whistle');
+      giantWhistle.addEventListener('click', () => {
+        soundEngine.init();
+        soundEngine.playWhistleSound();
+
+        const surfaceLayer = document.getElementById('surface-layer');
+        const surfaceWidth = surfaceLayer.clientWidth || 360;
+        const grassFloorY = getGrassY();
+
+        const ring = document.createElement('div');
+        ring.className = 'absolute w-32 h-32 rounded-full border-4 border-yellow-300 pointer-events-none z-30';
+        ring.style.left = '50%';
+        ring.style.top = '70%';
+        ring.style.animation = 'whistle-ring 0.65s cubic-bezier(0, 0.2, 0.8, 1) forwards';
+        surfaceLayer.appendChild(ring);
+        setTimeout(() => ring.remove(), 650);
+
+        // 全員集合在中央草皮並起跳歡呼
+        state.roamingPikmins.forEach((p, idx) => {
+          p.targetX = surfaceWidth * 0.5 + (idx * 15) - (state.roamingPikmins.length * 7.5);
+          p.targetY = grassFloorY;
+          p.state = 'cheering';
+          p.cheerTimer = 30;
+        });
+
+        showFloatingText(surfaceWidth * 0.5, grassFloorY - 35, '📯 隊長哨音！全員就位避險！✨', '#facc15');
+      });
+
+      // 透視模式開關
+      const xrayBtn = document.getElementById('btn-xray');
+      xrayBtn.addEventListener('click', () => {
+        soundEngine.init();
+        state.xrayEnabled = !state.xrayEnabled;
+        const soilLayer = document.getElementById('soil-layer');
+        const xrayGrid = document.getElementById('xray-grid');
+        const xrayText = document.getElementById('xray-text');
+
+        if (state.xrayEnabled) {
+          soilLayer.classList.add('soil-xray');
+          xrayGrid.style.opacity = '1';
+          xrayText.textContent = '透視:開';
+          xrayBtn.classList.add('bg-cyan-950', 'text-cyan-300', 'border-cyan-500');
+        } else {
+          soilLayer.classList.remove('soil-xray');
+          xrayGrid.style.opacity = '0';
+          xrayText.textContent = '透視:關';
+          xrayBtn.classList.remove('bg-cyan-950', 'text-cyan-300', 'border-cyan-500');
+        }
+
+        state.slots.forEach(slot => {
+          const root = slot.element.querySelector('.seed-root');
+          if (root && slot.occupied) root.style.opacity = state.xrayEnabled ? '1' : '0';
+        });
+      });
+
+      // 音效開關
+      const soundBtn = document.getElementById('btn-sound');
+      soundBtn.addEventListener('click', () => {
+        state.soundEnabled = !state.soundEnabled;
+        document.getElementById('sound-icon').textContent = state.soundEnabled ? '🔊' : '🔇';
+      });
+
+      // 攻略彈窗
+      const guideBtn = document.getElementById('btn-guide');
+      const guideModal = document.getElementById('guide-modal');
+      const closeGuide = document.getElementById('close-guide-btn');
+      const startBtn = document.getElementById('guide-confirm-btn');
+
+      const openModal = () => { soundEngine.init(); guideModal.classList.remove('hidden'); };
+      const closeModal = () => guideModal.classList.add('hidden');
+
+      guideBtn.addEventListener('click', openModal);
+      closeGuide.addEventListener('click', closeModal);
+      startBtn.addEventListener('click', closeModal);
+    }
+
+    // 啟動模擬器
+    window.onload = function() {
+      initGardenSlots();
+
+      setTimeout(() => {
+        const surfaceLayer = document.getElementById('surface-layer');
+        const w = surfaceLayer.clientWidth > 0 ? surfaceLayer.clientWidth : 360;
+        const grassY = getGrassY();
+
+        // 開局生態生成：斑膜怪、黃金水果、火焰門
+        spawnBulborb(w * 0.75, grassY);
+        spawnQuestFruit(w * 0.2, grassY);
+        spawnEnvHazard('fire', w * 0.45);
+      }, 120);
+
+      setupEventListeners();
+      updateDashboardStats();
+      requestAnimationFrame(simulationLoop);
+    };
+  </script>
+</body>
+</html>
